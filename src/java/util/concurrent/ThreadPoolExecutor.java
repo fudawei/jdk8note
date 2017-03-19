@@ -942,6 +942,12 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
             // 最后一种情况也就是说SHUTDONW状态下，如果队列不为空还得接着往下执行，为什么？add一个null任务目的到底是什么？
             // 看execute方法只有workCount==0的时候firstTask才会为null结合这里的条件就是线程池SHUTDOWN了不再接受新任务
             // 但是此时队列不为空，那么还得创建线程把任务给执行完才行。
+
+            /**
+             * 除去一下清醒之外的情况
+             *  1.线程池状态为RUNNING
+             *　2.SHUTDOWN状态，但队列中还有任务需要执行
+             */
             if (rs >= SHUTDOWN &&
                 ! (rs == SHUTDOWN &&
                    firstTask == null &&
@@ -1431,18 +1437,30 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
          * 3. If we cannot queue task, then we try to add a new
          * thread.  If it fails, we know we are shut down or saturated
          * and so reject the task.
+         *
+         * 1、如果线程池中运行线程比corePoolSize小，则尝试位新任务新建一个线程；
+         * 调用addWorker方法会检查线程池状态和线程数，防止在天剑线程的时候误报返回false
+         *
+         * ２、如果任务能够被成功加到执行队列里面，仍然需要双重检查我们是否已经加入了一个线程（上次检查之后的线程死了）或者线程池已经关闭
+         * 线程池停止我们会把线程从队列中去除,如果没有启动的线程我们会新建一个
+         *
+         */
+
+
+        /**
+         * 如果线程数小于corePoolSize 则之间添加一个线程，当前线程会把当前任务当做第一个任务执行，之后一直循环执行任务队列中的任务（如果有的话）
          */
         int c = ctl.get();
-        // 活动线程数 < corePoolSize
         if (workerCountOf(c) < corePoolSize) {
-            // 直接启动新的线程。第二个参数true:addWorker中会重新检查workerCount是否小于corePoolSize
             if (addWorker(command, true))
                 // 添加成功返回
                 return;
             c = ctl.get();
         }
-        // 活动线程数 >= corePoolSize
+
+        // 活动线程数 >= corePoolSize的情况
         // runState为RUNNING && 队列未满
+
         if (isRunning(c) && workQueue.offer(command)) {
             int recheck = ctl.get();
             // double check
